@@ -210,18 +210,6 @@ void led_ctrl_by_voltage(void)        //不同电压区间灯闪亮
 	g_led_light_times = 0xff;   
 }
 
-void reserve_led_ocuppied(void)        //灯占用取反
-{
-    if (g_led_occupied == 0)
-	{
-	    g_led_occupied = 1;	
-	}
-	else
-	{
-		g_led_occupied = 0;
-	}
-}
-
 void mcu_init(void)   //MCU初始化
 {
 
@@ -272,8 +260,8 @@ void mcu_init(void)   //MCU初始化
 	{
    	    if(g_time1s_flag == 1)
    	    {
-   	      g_time1s_flag = 0;
-		  led_disp();
+   	        g_time1s_flag = 0;
+		    led_disp();
 		}  
 	}while(g_led_light_times == 0);
 	
@@ -296,7 +284,6 @@ void main(void)
 {
     uchar temp_keyval = 1;
     uchar duty_val = 50;         //发热丝达到3.7V的占空比参考值
-    uchar adctest_times = 0;
   
     mcu_init();
   
@@ -308,140 +295,129 @@ void main(void)
 		{
 			case 0x01:                                 //正常模式
 			    if(g_keypress_maxtime > 0)
-                {
+	            {
 				    led_ctrl_by_voltage();
-          
+	         
 	                if(g_keypress_maxtime > 200)       //判断吸烟超过10s情况
 	                {
-	     	            DUTY(0);                       //关掉MOS管
-	     	            if(g_led_occupied == 0)        //判断LED是否被占用
-	     	            {
-	     	                g_led_occupied = 1;        //占用灯
-	                        g_led_light_times = 0x8;   //闪烁8次
+		   	            DUTY(0);                       //关掉MOS管
+		   	            if(g_led_occupied == 0)        //判断LED是否被占用
+	    	            {
+		                    g_led_occupied = 1;        //占用灯
+		                    g_led_light_times = 0x8;   //闪烁8次
 	                    }  
-	               
-				        if(g_led_light_times == 0)     //解除占用
-	                    {
-                            g_led_occupied = 0;
-	                    }
-	                
-					    break;   
+		               
+					    if(g_led_light_times == 0)     //解除占用
+		                {
+	                        g_led_occupied = 0;
+		                }
+		                
+					   	break;   
 	                }     
-                
+	                
 				    if(g_loadvolt < SHORT_LOAD_VOLT)           //检测雾化器短路故障
-                    {
-                        DUTY(100);
-                        adctest_times++;
-					    if(adctest_times >= 3)
-                        {
-                            adctest_times = 0;
-							reserve_led_ocuppied();
-                            g_fault_state = 0x08;
-                            g_next_state = 0x02;
-                        
-						    break;
-                        }
-                    }
-				
+	                {
+	                    DUTY(100);
+                        g_led_occupied = 0;
+                        g_fault_state = 0x08;
+                        g_next_state = 0x02;
+	                        
+						break;
+	                }
+					
                     if(g_batteryvolt < LOW_BAT_VOLT)        //检测电池低压故障 
                     {
-                        adctest_times++;
-					    if(adctest_times >= 3)
-                        {
-                            adctest_times = 0;
-						    reserve_led_ocuppied();
-                            g_fault_state = 0x04;
-                            g_next_state = 0x02;
-                        }
+                        g_led_occupied = 0;
+                        g_fault_state = 0x04;
+                        g_next_state = 0x02;
                     } 
 	                else
-	                {
-	                    if(g_batteryvolt >= STABLE_BAT_VOLT)     
-        	            {  
-                            if(g_loadvolt > STABLE_LOAD_VOLT_MAX)
-						    {
-							    duty_val -= 2;
-						    }   
-                            else if(g_loadvolt < STABLE_LOAD_VOLT_MIN) 
-						    {
-							    duty_val += 2;
+                    {
+		                if(g_batteryvolt >= STABLE_BAT_VOLT)     
+	                    {  
+	                        if(g_loadvolt > STABLE_LOAD_VOLT_MAX)
+			    		    {
+		    				    duty_val -= 2;
+						   	}   
+	                        else if(g_loadvolt < STABLE_LOAD_VOLT_MIN) 
+		     			    {
+	     						duty_val += 2;
 						    }
-              
                             DUTY(duty_val); 
 	                    }
 	                    else
-					    {
-	                        DUTY(100);
+						{
+					        DUTY(100);
 					    }
-	               
-	                    g_led_light_times = 0xff;
-	                }				 
-                }
+		               
+		                g_led_light_times = 0xff;
+		            }				 
+	            }
                 else
                 {          
                     P5CR = 0X01;		      //P50设为输入 ,P51,P55设为输出
                     AISR = 0X00;              //P55设为IO端口
-	                reserve_led_ocuppied();
+                    g_led_occupied = 0;
                     g_next_state = 0x08;
                 }
-			     
-	        break;
-			
-			case 0x02:                        //故障模式
-			    DUTY(0);
+				     
+		    break;
 				
+		    case 0x02:                        //故障模式
+			   	DUTY(0);
+					
                 if(g_fault_state == 0x02)
                 {
-                    if(g_led_occupied == 0)
-                    {
+		            if(g_led_occupied == 0)
+	                {
 						g_led_r = 0;
 						g_led_g = 0;
-                        g_led_b = 1;
-						g_led_onoff_status = 1;
-						g_led_occupied = 1;
-						g_led_light_times = 0x14;
-                    } 
-				
+	                    g_led_b = 1;
+					    g_led_onoff_status = 1;
+					    g_led_occupied = 1;
+					    g_led_light_times = 0x14;
+	                } 
+					
                     if(g_led_light_times == 0)
                     {
-	                    g_led_occupied = 0;
-                        g_next_state = 0x08;
+                        g_led_occupied = 0;
+                        g_next_state = 0x04;
                     }
                 }
                 else if(g_fault_state == 0x04)
                 {
                     if(g_led_occupied == 0)
                     {
-						g_led_r = 1;
+					    g_led_r = 1;
 						g_led_g = 0;
-                        g_led_b = 0;
+					    g_led_b = 0;
 						g_led_onoff_status = 1;
 						g_led_occupied = 1;
 						g_led_light_times = 0xa;
-                    }      
-                
-				    if(g_led_light_times == 0)
+                    }       
+	                
+					if(g_led_light_times == 0)
                     {
                         if(g_batteryvolt > LOW_BAT_VOLT)  
                         {
-	                        g_led_occupied = 0;
+                            g_led_occupied = 0;
                             g_next_state = 0x01;
                         }
                     }      
-                }
+	            }
                 else if(g_fault_state==0x08)
                 {
                     if(g_led_occupied == 0)
                     {
-						g_led_r = 1;
+		     		    g_led_r = 1;
 						g_led_g = 1;
 						g_led_b = 1;
 						g_led_onoff_status = 1;
 						g_led_occupied = 1;
-						g_led_light_times = 0x3;
+			    		g_led_light_times = 0x3;
                     }         
-                
-     				if(g_led_light_times == 0)
+            
+				 	if(g_led_light_times == 0)
                     {
                         g_led_occupied = 0;
                         g_next_state = 0x01; 
@@ -456,67 +432,57 @@ void main(void)
 						g_led_b = 1;
 						g_led_onoff_status = 1;
 						g_led_occupied = 1;
-						g_led_light_times = 0x6;
+	   					g_led_light_times = 0x6;
                     }    
-                
+	                
 				    if(g_led_light_times == 0)
                     {
                         if(g_batteryvolt > LOW_BAT_VOLT)    
-                        {
-                            g_led_occupied = 0;
-                            g_next_state = 0x04;
-                        }  
-                    }      
-                }    
-                else
-                {
-                    reserve_led_ocuppied();
-                    g_next_state = 0x01;
-                } 
-				
-            break;
-
+                            {
+                                g_led_occupied = 0;
+                                g_next_state = 0x04;
+                            }  
+                        }      
+	                }    
+                    else
+                    {
+                        g_led_occupied = 0;
+                        g_next_state = 0x01;
+                    } 
+					
+	        break;
+	
             case 0x04:                                 //充电模式
                 if(g_loadvolt < SHORT_LOAD_VOLT)   
                 {
-                    adctest_times++;
-				    if(adctest_times >= 3)
-                    {
-                        adctest_times = 0;
-                        g_fault_state = 0x10;
-                        g_next_state = 0x02;
-                    }
+                    g_fault_state = 0x10;
+                    g_next_state = 0x02;
                 }
                 else if(g_loadvolt > CHARGE_BAT_VOLT_TH)   
                 {
-                    adctest_times++;
-                    if(adctest_times >= 3)
-                    {
-                        adctest_times = 0;
-                        g_fault_state = 0x02;
-                        g_next_state = 0x02;
-                    }
+                    g_fault_state = 0x02;
+                    g_next_state = 0x02;
                 }
                 else
                 {
-     	            DUTY(100);
+   	        		UTY(100);
                 }
-	 
+ 
                 led_ctrl_by_voltage();
-				
+			
             break;
-
-            case 0x08:                            //睡眠模式
+	
+            case 0x08:                        //睡眠模式
                 SLEP();
-  	            P5CR = 0X21;			          //P50,P55设为输入 ,P51设为输出
-	            AISR = 0X40;			          //P55/ADC6引脚作为ADC6输入口
-	            if(g_loadvolt < WAKEUP_LOAD_VOLT)            //由按键唤醒，进入吸烟状态      0.5
-	            {
-	                g_next_state = 0x01;
+	            P5CR = 0X21;			          //P50,P55设为输入 ,P51设为输出
+          	    AISR = 0X40;			          //P55/ADC6引脚作为ADC6输入口
+         	    if(g_loadvolt < WAKEUP_LOAD_VOLT)            //由按键唤醒，进入吸烟状态      0.5
+          	    {
+                    g_next_state = 0x01;
                 }
                 else if((g_loadvolt > HIG_BAT_VOLT_TH)||(g_loadvolt < FAULT_BAT_VOLT))   //由c_sens唤醒，充电器故障 
                 {
-					reserve_led_ocuppied();
+                    g_led_occupied = 0;
                     g_fault_state = 0x01;
                     g_next_state = 0x02;
                 }
@@ -525,25 +491,26 @@ void main(void)
                     if(g_led_occupied == 0)
                     {
 				        g_led_r = 1;
-						g_led_g = 0;
+					    g_led_g = 0;
 						g_led_b = 1;
-						g_led_onoff_status = 1;
+					    g_led_onoff_status = 1;
 						g_led_occupied = 1;
 						g_led_light_times = 0x6;
                     }        
-                
-				    if(g_led_light_times == 0)          
+              
+			        if(g_led_light_times == 0)          
                     {
-                        g_led_occupied = 1;
+                        g_led_occupied = 0;
                         g_next_state = 0x04;
                     }  
                 }
-            break;
-
+              
+          	break;
+	
             default:
                 g_next_state = 0x00;
             break;				
-		}
+        }
 		
         if(g_time50ms_flag == 1)           //key处理
         {
@@ -553,9 +520,9 @@ void main(void)
 			if((temp_keyval == g_keyval)&&(g_keyval == 0))
             {
                 if(g_loadvolt > LOW_BAT_VOLT)
-				{					
+		        {					
                     g_keypress_maxtime++;
-				}
+			    }
             }
             else if((temp_keyval == 0)&&(g_keyval == 1)&&(g_keypress_maxtime < 40))
             {
@@ -565,26 +532,26 @@ void main(void)
                     g_time2s_flag = 0;
                 }
       	        
-				g_keypress_times++;
+			    g_keypress_times++;
       	        
-				if(g_time2s_flag == 1)
-      	        {
+			    if(g_time2s_flag == 1)
+                {
       	            if(g_keypress_times >= 5)
       	            { 
-				      	g_keypress_times = 0;
-      	                
-						DUTY(0);
+	     	      	    g_keypress_times = 0;
+      	               
+					    DUTY(0);
       	                
 						if(g_cur_state == 0x00)
-						{
+					    {
       	                    g_next_state = 0x01;
-						}
+		     		    }
       	                else
-						{
-      	                    g_next_state = 0x00;
-						}
-      	            }
-      	        }	
+    				    {
+                            g_next_state = 0x00;
+					    }
+   	                }
+   	            }	
             }
 			
             temp_keyval = g_keyval;
@@ -592,8 +559,8 @@ void main(void)
     
         if(g_time1s_flag == 1)           //指示灯处理
         {
-    	    g_time1s_flag = 0;
-    	    led_disp();
+            g_time1s_flag = 0;
+            led_disp();
         }
 
         g_cur_state = g_next_state;		
