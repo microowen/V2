@@ -465,7 +465,7 @@ void main(void)
                 }
                 else
                 {
-                       UTY(100);
+                       DUTY(100);
                 }
  
                 led_ctrl_by_voltage();
