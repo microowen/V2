@@ -1,0 +1,2 @@
+1. modifed interrupt from 0x12 to 0x18
+2. Initialize P51 = 1, keep the blue LED is off
