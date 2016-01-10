@@ -52,6 +52,22 @@ uchar g_next_state         @0X32:bank 0;
 
 extern int IntVecIdx; //occupied 0x10:rpage 0
 
+//将RAM区通用寄存器清零
+void Clr_Ram(void)        
+{
+    RSR = 0x10;               //BANK 0 的0x10寄存器
+    do
+    {  
+        R0 = 0;         
+        RSR++;
+        if (RSR == 0x40)
+        {	
+           RSR = 0x60;
+        }
+     }while(RSR < 0x80);
+
+}
+
 //ADC校准函数
 void ad_cali_p(void)         
 {
@@ -93,7 +109,7 @@ void _intcall ALLInt(void) @ int
 {     
     switch(IntVecIdx)
     {
-        case 0x13:
+        case 0x19:
         if(PWM2IF == 1)
         {
             PWM2IF = 0;    //清PWM1中断标志位
@@ -120,7 +136,7 @@ void _intcall ALLInt(void) @ int
     }     
 }
 
-void _intcall PWM2P_l(void) @0x12:low_int 5
+void _intcall PWM2P_l(void) @0x18:low_int 6
 {
     _asm{MOV A,0x2};
 }
@@ -148,7 +164,7 @@ void led_disp(void)    //LED控制
 {
     if(g_led_light_times >= 1) 
     {
-        if(g_led_onoff_status)   //0000 0000 0000 1000
+        if(g_led_onoff_status)   
         {
             if(g_led_light_times != 0xff)
             {
@@ -215,66 +231,70 @@ void mcu_init(void)   //MCU初始化
 
     WDTC();
     DISI();
-    SCR = 0X7F;            //选择4MHz,TIMER 选择主频
+    SCR = 0X7F;         //选择4MHz,TIMER 选择主频
     
+    Clr_Ram();
     P6CR = 0;           //P67设为输出
-    TMRCON = 0X22;        //PWM1预分频比设为1：4，PWM2预分频比设为1：16
-    PWMCON = 0X01;        //使能PWM1输出口
-    PRD1 = 99;            //周期=1/4*(99+1)*4=100us
+    TMRCON = 0X22;      //PWM1预分频比设为1：4，PWM2预分频比设为1：16
+    PWMCON = 0X01;      //使能PWM1输出口
+    PRD1 = 99;          //周期=1/4*(99+1)*4=100us
     DUTY(0);            //输出占空比0%的波
     PRD2 = 249;         //周期=1/4*(249+1)*16=1ms
-    IMR = 0X10;            //使能PWM2中断
-    T2EN = 1;            //PWM2定时开始
+    IMR = 0X10;         //使能PWM2中断
+    T2EN = 1;           //PWM2定时开始
     ENI();    
     
-    P5CR = 0X21;            //P50,P55设为输入 ,P51设为输出
-    P5PHCR = 0XFC;        //P50,P51上拉
-    AISR = 0X40;            //P55/ADC6引脚作为ADC6输入口
-    //ADCON=0X0E;        //打开AD电源，并选择ADC6输入口
-    ISR1 = 0X02;            //使能PORT5状态改变唤醒功能
-     PORT5 = PORT5;        //读取PORT5状态
-     IDLE = 0;
-     
-    P7CR = 0X01;            //P70设为输入 ,P71设为输出
-    AISR = 0X20;            //P71/ADC5引脚作为ADC5输入口
-    ADCON = 0X0D;            //选择ADC5输入口        
+    P5CR = 0X21;        //P50,P55设为输入 ,P51设为输出
+    P5PHCR = 0XFC;      //P50,P51上拉
+    P51 = 0;            //默认蓝灯关
+    AISR = 0X40;        //P55/ADC6引脚作为ADC6输入口
+    ISR1 = 0X02;        //使能PORT5状态改变唤醒功能
+    PORT5 = PORT5;      //读取PORT5状态
+    IDLE = 0;
+         
+    P7CR = 0X01;        //P70设为输入 ,P71设为输出
+    AISR = 0X20;        //P71/ADC5引脚作为ADC5输入口
+    ADCON = 0X0D;       //选择ADC5输入口        
     ad_cali_p();        //调用AD子程序
     
     do
     {
-        ADRUN = 1;                    //使能AD转换
-        while(ADRUN == 1);            //等待AD转换完成
+        ADRUN = 1;                         //使能AD转换
+        while(ADRUN == 1);                 //等待AD转换完成
         g_batteryvolt_h = ADDATA1H;
         g_batteryvolt_l = ADDATA1L;        //保存AD转换值
     }
     while(g_batteryvolt < LOW_BAT_VOLT);
 
-    g_led_r = 1;                  //红灯
-    g_led_g = 1;                  //红灯
-    g_led_b = 1;                  //蓝灯
-    g_led_onoff_status = 0;
+    P7CR = 0x00;
+    AISR = 0x00;
+    g_led_r = 1;                          //红灯
+    g_led_g = 1;                          //红灯
+    g_led_b = 1;                          //蓝灯
+    g_led_onoff_status = 1;
     g_led_occupied = 0;
     g_led_light_times = 0x3;
     
     do
     {
-           if(g_time1s_flag == 1)
-           {
-               g_time1s_flag = 0;
+        if(g_time1s_flag == 1)
+        {
+            g_time1s_flag = 0;
             led_disp();
         }  
-    }while(g_led_light_times == 0);
-    
+    }while(g_led_light_times != 0);
+
     g_keyval = P50;
+    
     if(g_keyval == 0)
     {
         DUTY(100);
-        g_cur_state = 0x01;
+        g_next_state = 0x01;
     }
     else
     {
         DUTY(0);
-        g_cur_state = 0x08;
+        g_next_state = 0x08;
     }
     
     g_fault_state = 0x00;
@@ -282,15 +302,19 @@ void mcu_init(void)   //MCU初始化
 
 void main(void)
 {
-    uchar temp_keyval = 1;
-    uchar duty_val = 50;         //发热丝达到3.7V的占空比参考值
+    uchar temp_keyval;
+    uchar duty_val;         //发热丝达到3.7V的占空比参考值
   
     mcu_init();
+
+    temp_keyval = 1;
+    duty_val = 50;         //发热丝达到3.7V的占空比参考值
   
     while(1)
     {
         adc_sample();
-
+		g_cur_state = g_next_state;
+		
         switch(g_cur_state)
         {
             case 0x01:                                 //正常模式
@@ -311,7 +335,7 @@ void main(void)
                         {
                             g_led_occupied = 0;
                         }
-                        
+                         
                            break;   
                     }     
                     
