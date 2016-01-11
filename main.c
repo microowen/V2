@@ -73,7 +73,7 @@ void ad_cali_p(void)
 {
     uchar cnt = 0x07;
     
-    ADOC = 0xF8;            //使能ADC位校正功能
+    ADOC = 0xFC;            //使能ADC位校正功能,内部参考电压3V
     
     do
     {
@@ -143,21 +143,21 @@ void _intcall PWM2P_l(void) @0x18:low_int 6
 
 void adc_sample(void)     //ADC采样
 {
-    ADCON = 0x06;
+    P7CR = 0x01;
+    AISR = 0x20;        //P71/ADC5引脚作为ADC5输入口
+    ADCON = 0x0D;       //选择ADC5输入口
     ADRUN = 1;
     while(ADRUN == 1);
     g_batteryvolt_h = ADDATA1H;
     g_batteryvolt_l = ADDATA1L;
-    
-    P7CR = 0x01;
-    AISR = 0x20;
-    ADCON = 0x05;
+    P7CR = 0x00;
+        
+    AISR = 0X40;        //P55/ADC6引脚作为ADC6输入口 
+    ADCON = 0x0E;       //选择ADC5输入口
     ADRUN = 1;
     while(ADRUN == 1);   
     g_loadvolt_h = ADDATA1H;
     g_loadvolt_l = ADDATA1L;
-    P7CR = 0x00;
-    AISR = 0x00;
 }
 
 void led_disp(void)    //LED控制
@@ -247,7 +247,6 @@ void mcu_init(void)   //MCU初始化
     P5CR = 0X21;        //P50,P55设为输入 ,P51设为输出
     P5PHCR = 0XFC;      //P50,P51上拉
     P51 = 0;            //默认蓝灯关
-    AISR = 0X40;        //P55/ADC6引脚作为ADC6输入口
     ISR1 = 0X02;        //使能PORT5状态改变唤醒功能
     PORT5 = PORT5;      //读取PORT5状态
     IDLE = 0;
@@ -313,8 +312,9 @@ void main(void)
     while(1)
     {
         adc_sample();
-		g_cur_state = g_next_state;
-		
+ 
+        g_cur_state = g_next_state;
+
         switch(g_cur_state)
         {
             case 0x01:                                 //正常模式
@@ -388,7 +388,7 @@ void main(void)
             break;
                 
             case 0x02:                        //故障模式
-                   DUTY(0);
+                DUTY(0);
                     
                 if(g_fault_state == 0x02)
                 {
@@ -499,9 +499,9 @@ void main(void)
             case 0x08:                        //睡眠模式
                 SLEP();
                 P5CR = 0X21;                      //P50,P55设为输入 ,P51设为输出
-                  AISR = 0X40;                      //P55/ADC6引脚作为ADC6输入口
-                 if(g_loadvolt < WAKEUP_LOAD_VOLT)            //由按键唤醒，进入吸烟状态      0.5
-                  {
+                AISR = 0X40;                      //P55/ADC6引脚作为ADC6输入口
+                if(g_loadvolt < WAKEUP_LOAD_VOLT)            //由按键唤醒，进入吸烟状态      0.5
+                {
                     g_next_state = 0x01;
                 }
                 else if((g_loadvolt > HIG_BAT_VOLT_TH)||(g_loadvolt < FAULT_BAT_VOLT))   //由c_sens唤醒，充电器故障 
