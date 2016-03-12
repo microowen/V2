@@ -12,6 +12,7 @@
 #define SHORT_LOAD_VOLT       0x400                                 //(1.5V/2)/3V*4096=1024
 #define CHARGE_BAT_VOLT_TH    0xB11                                 //(4.15V/2)/3V*4096=2833
 #define WAKEUP_LOAD_VOLT      0x155                                 //(0.5V/2)/3V*4096=341
+#define DUTY(n)               do{DT1 = n; T1EN = 1;}while(0)        //n 0~100
 #define MOS_ON                0                                     //打开MOS
 #define MOS_OFF               100                                   //关闭MOS
 #define VBAT37                0x9DD                                 //(3.7V/2)/3V*4096=2525  --100
@@ -20,11 +21,11 @@
 #define VBAT40                0xAAB                                 //(4.0V/2)/3V*4096=2731  --85
 #define VBAT41                0xAEF                                 //(4.1V/2)/3V*4096=2799  --81
 #define VBAT42                0xB33                                 //(4.2V/2)/3V*4096=2867  --77
-#define MOS_37_38             97                           
-#define MOS_38_39             92                            
-#define MOS_39_40             88                            
-#define MOS_40_41             83                            
-#define MOS_41_42             79                            
+#define MOS_37_38             3                           
+#define MOS_38_39             8                            
+#define MOS_39_40             12                            
+#define MOS_40_41             17                            
+#define MOS_41_42             21                            
 
 #define uchar unsigned char 
 #define ushort unsigned short 
@@ -51,13 +52,23 @@ uchar g_keypress_times           @0X2E:bank 0;
 uchar g_keypress_maxtime         @0X2F:bank 0;
 uchar g_led_onoff                @0X30:bank 0;
 
-uchar g_cur_state          @0X31:bank 0;
-uchar g_next_state         @0X32:bank 0;
+uchar g_cur_state                @0X31:bank 0;
+uchar g_next_state               @0X32:bank 0;
 
 extern int IntVecIdx; //occupied 0x10:rpage 0
 
+void delay_us(uchar count)
+{
+    uchar i; 
+    
+    for (i = 0; i < count; i++)
+    {
+       NOP(); 
+    }
+}
+
 //将RAM区通用寄存器清零
-void Clr_Ram(void)        
+void clr_ram(void)        
 {
     RSR = 0x10;               //BANK 0 的0x10寄存器
     do
@@ -115,7 +126,8 @@ void _intcall PWM2P_l(void) @0x15:low_int 6
 
 void battery_load_volt_sample(void)   //负载和电池电压采样
 {
-    P5CR = 0x21;
+    uchar i;
+    
     ADE6 = 1;           //P55/ADC6引脚作为ADC6输入口 
 
     ADIS2 = 1;          //选择ADC6输入口
@@ -124,12 +136,14 @@ void battery_load_volt_sample(void)   //负载和电池电压采样
     
     ADPD = 1;          //打开ADC电源
    
-    ADRUN = 1;
-    while(ADRUN == 1);   
-    g_battery_load_volt_h = ADDATA1H;
-    g_battery_load_volt_l = ADDATA1L;
-    NOP();
-    NOP();
+    for (i = 0; i < 3; i++)
+    {
+        ADRUN = 1;
+        while(ADRUN == 1);   
+        g_battery_load_volt_h = ADDATA1H;
+        g_battery_load_volt_l = ADDATA1L;
+        delay_us(2);
+    }
 }
 
 void led_disp(void)    //LED控制
@@ -187,7 +201,7 @@ void led_disp(void)    //LED控制
 
 void led_ctrl_by_voltage(void)        //不同电压区间灯闪亮
 {
-     if(g_battery_load_volt < LOW_BAT_VOLT_TH)      
+    if(g_battery_load_volt < LOW_BAT_VOLT_TH)      
     {
         g_led_r = 1;                  //红灯   
         g_led_g = 0;                  //绿灯    
@@ -210,18 +224,12 @@ void led_ctrl_by_voltage(void)        //不同电压区间灯闪亮
     g_led_light_times = 0xff;   
 }
 
-void pwm_set(uchar duty)
-{
-    P6CR = 0;           //P67设为输出
-    PWMCON = 0X01;      //使能PWM1输出口
-    PRD1 = 99;          //周期=1/4*(99+1)*4=100us
-    DT1 = duty; 
-    T1EN = 1;
-}
-
 void pwm_timer_init(void)
 {
+    P6CR = 0;           //P67设为输出
     TMRCON = 0X22;      //PWM1预分频比设为1：4,PWM2预分频比设为1：16
+    PWMCON = 0X01;      //使能PWM1输出口
+    PRD1 = 99;          //周期=1/4*(99+1)*4=100us
     PRD2 = 249;         //周期=1/4*(249+1)*16=1ms
     IMR = 0X10;         //使能PWM2中断
     T2EN = 1;           //PWM2定时开始
@@ -230,8 +238,6 @@ void pwm_timer_init(void)
 
 void led_init()
 {
-    P7CR = 0x00;
-    AISR = 0x00;
     g_led_r = 1;                          //红灯
     g_led_g = 1;                          //红灯
     g_led_b = 1;                          //蓝灯
@@ -254,6 +260,7 @@ void gpio_init()
     P5CR = 0X21;        //P50,P55设为输入 ,P51设为输出
     P5PHCR = 0XFC;      //P50,P51上拉
     P51 = 0;            //默认蓝灯关
+    P7CR = 0;
 }
 
 void adc_init()
@@ -287,9 +294,9 @@ void mcu_init(void)   //MCU初始化
     DISI();
     SCR = 0X7F;         //选择4MHz,TIMER 选择主频
     
-    Clr_Ram();
+    clr_ram();
     pwm_timer_init();  
-    pwm_set(MOS_OFF);
+    DUTY(MOS_OFF);
     gpio_init();
     adc_init();
     led_init();
@@ -327,35 +334,38 @@ void main(void)
                 {
                     if(g_keypress_maxtime >= 200)       //判断吸烟超过10s情况
                     {
-                        pwm_set(MOS_OFF);
-                        if(g_led_occupied == 0)        //判断LED是否被占用
+                        if (g_keypress_maxtime == 200)
                         {
-                            g_led_occupied = 1;        //占用灯
-                            g_led_light_times = 0x8;   //闪烁8次
-                        }  
-                       
-                        if(g_led_light_times == 0)     //解除占用
-                        {
-                            g_led_occupied = 0;
+                            DUTY(MOS_OFF);
+                            if(g_led_occupied == 0)        //判断LED是否被占用
+                            {
+                                g_led_occupied = 1;        //占用灯
+                                g_led_light_times = 0x8;   //闪烁8次
+                            }  
+                           
+                            if(g_led_light_times == 0)     //解除占用
+                            {
+                                g_led_occupied = 0;
+                            }
                         }
-                    
+                        
                         break;   
                     } 
                     
-                    pwm_set(MOS_ON);
+                    DUTY(MOS_ON);
                     
                     battery_load_volt_sample();
 
                     if(g_battery_load_volt < SHORT_LOAD_VOLT)         //检测雾化器短路故障
                     {
-                        pwm_set(MOS_OFF);
+                        DUTY(MOS_OFF);
                         g_led_occupied = 0;
                         g_fault_state = 0x08;
                         g_next_state = 0x02;
                     }
                     else if(g_battery_load_volt < LOW_BAT_VOLT)        //检测电池低压故障 
                     {
-                        pwm_set(MOS_OFF);
+                        DUTY(MOS_OFF);
                         g_led_occupied = 0;
                         g_fault_state = 0x04;
                         g_next_state = 0x02;
@@ -369,29 +379,29 @@ void main(void)
                         
                         if(g_battery_load_volt <= VBAT37)
                         {
-                            pwm_set(MOS_ON);
+                            DUTY(MOS_ON);
                         } 
                         else if (g_battery_load_volt <= VBAT38)
                         {
-                            pwm_set(MOS_37_38);
+                            DUTY(MOS_37_38);
                         }
                         else if(g_battery_load_volt <= VBAT39)
                         {
-                            pwm_set(MOS_38_39);
+                            DUTY(MOS_38_39);
                         }
                         else if(g_battery_load_volt <= VBAT40)
                         {
-                            pwm_set(MOS_39_40);
+                            DUTY(MOS_39_40);
                         }
                         else if(g_battery_load_volt <= VBAT41)
                         {
-                            pwm_set(MOS_40_41);
+                            DUTY(MOS_40_41);
                         } 
                         else
                         {
-                            pwm_set(MOS_41_42);
+                            DUTY(MOS_41_42);
                         }
-                    }                 
+                    }              
                 }
                 else
                 {         
@@ -433,41 +443,35 @@ void main(void)
             case 0x04:                                 //充电模式   
                 if(g_battery_load_volt < SHORT_LOAD_VOLT)   
                 {
-                    pwm_set(MOS_OFF);
+                    DUTY(MOS_OFF);
                     g_fault_state = 0x10;
                     g_next_state = 0x02;
                 }
                 else if(g_battery_load_volt > CHARGE_BAT_VOLT_TH)   
                 {
-                    pwm_set(MOS_OFF);
+                    DUTY(MOS_OFF);
                     g_fault_state = 0x02;
                     g_next_state = 0x02;
                 }
                 else
                 {
-                    pwm_set(MOS_ON);
+                    DUTY(MOS_ON);
                     battery_load_volt_sample();
                     led_ctrl_by_voltage();
                 }
             break;
     
             case 0x08:                                  //睡眠模式
-                pwm_set(MOS_OFF);
-                P5CR = 0X01;                            //P50设为输入 ,P51,P55设为输出
-                AISR = 0X00;                            //P55设为IO端口
-                P5PDCR = 0xDF;                          //P55下拉
-                P55 = 0;                                //P55拉低
+                DUTY(MOS_OFF);
                 P70 = 1;                                //灭红灯
                 P71 = 1;                                //灭绿灯
                 P51 = 0;                                //灭蓝灯
                 ISR1 = 0X02;                            //使能PORT5状态改变唤醒功能
                 PORT5 = PORT5;                          //读取PORT5状态
                 IDLE = 0;
-                NOP();
-                NOP();
+                delay_us(2);
                 SLEP();                                 //进入睡眠
-                NOP();
-                NOP();
+                delay_us(2);
 
                 g_keypress_maxtime = 0;
                 
@@ -497,14 +501,14 @@ void main(void)
             
             if(((temp_keyval == g_keyval)&&(g_keyval == 0))||(g_cur_state == 0x08))
             {
-                    if(g_keypress_maxtime == 255)
-                    {
-                        g_keypress_maxtime = 255;
-                    }
-                    else
-                    {
-                        g_keypress_maxtime++;
-                    }
+                if(g_keypress_maxtime == 255)
+                {
+                    g_keypress_maxtime = 255;
+                }
+                else
+                {
+                    g_keypress_maxtime++;
+                }
             }
             else if((temp_keyval == 0)&&(g_keyval == 1))
             {
@@ -537,7 +541,7 @@ void main(void)
             { 
                 g_keypress_times = 0;
                  
-                pwm_set(MOS_OFF);
+                DUTY(MOS_OFF);
                   
                 if(g_cur_state == 0x00)
                 {
