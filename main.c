@@ -12,7 +12,7 @@
 #define SHORT_LOAD_VOLT       0x400                                 //(1.5V/2)/3V*4096=1024
 #define CHARGE_BAT_VOLT_TH    0xB11                                 //(4.15V/2)/3V*4096=2833
 #define WAKEUP_LOAD_VOLT      0x155                                 //(0.5V/2)/3V*4096=341
-#define MOS_ON                0                                     //打开MOS
+#define MOS_ON                1                                     //打开MOS
 #define MOS_OFF               250                                   //关闭MOS
 #define VBAT37                0x9DD                                 //(3.7V/2)/3V*4096=2525  --100
 #define VBAT38                0xA22                                 //(3.8V/2)/3V*4096=2594  --94
@@ -217,7 +217,7 @@ void led_disp(void)    //LED控制
             
     if(g_led_g)
     {
-        P51 = ~g_led_onoff;         //绿灯
+        P51 = ~g_led_onoff;         //尾灯
     }
     else
     {
@@ -229,21 +229,21 @@ void led_ctrl_by_voltage(void)        //不同电压区间灯闪亮
 {
     if(g_battery_load_volt < LOW_BAT_VOLT_TH)      
     {
-        g_led_r = 1;                  //红灯   
-        g_led_g = 0;                  //绿灯    
-        g_led_b = 0;                  //蓝灯        
+        g_led_r = 1;                  //红灯       
+        g_led_b = 0;                  //蓝灯
+        g_led_g = 1;                  //尾灯        
     }
     else if(g_battery_load_volt < MID_BAT_VOLT_TH)    
     {
         g_led_r = 1;                  //红灯
-        g_led_g = 0;                  //绿灯
         g_led_b = 1;                  //蓝灯
+        g_led_g = 1;                  //尾灯
     }
     else
     {
-        g_led_r = 0;                  //红灯 
-        g_led_g = 0;                  //绿灯
-        g_led_b = 1;                  //蓝灯
+        g_led_r = 0;                  //红灯
+        g_led_b = 1;                  //蓝灯 
+        g_led_g = 1;                  //尾灯
     }        
     
     g_led_onoff_status = 1;           //灯亮
@@ -452,6 +452,10 @@ void main(void)
                         g_next_state = 0x01;
                     }
                     
+                    //释放按键灭灯
+                    g_led_r = 0;
+                    g_led_g = 0;
+                    g_led_b = 0;
                 }
                      
             break;
@@ -459,23 +463,23 @@ void main(void)
             case 0x02:                          //故障模式
                 if(g_fault_state == 0x02)       //过充保护
                 {
-                    fault_detect_protect(0,0,1,0x14,0x8);
+                    fault_detect_protect(0,0,1,20,0x8);
                 }
                 else if(g_fault_state == 0x04)  //低压保护
                 {
-                    fault_detect_protect(1,0,0,0xa,0x8);     
+                    fault_detect_protect(1,0,0,10,0x8);     
                 }
                 else if(g_fault_state==0x08)    //发热丝短路保护
                 {
-                    fault_detect_protect(1,1,1,0x3,0x8);
+                    fault_detect_protect(1,1,1,3,0x8);
                 }     
                 else if(g_fault_state == 0x10)  //充电器短路保护
                 {
-                    fault_detect_protect(1,1,1,0x6,0x8);     
+                    fault_detect_protect(1,1,1,6,0x8);     
                 }    
                 else if(g_fault_state==0x20)    //过渡进入充电状态        
                 {
-                    fault_detect_protect(1,0,1,0x3,0x4);
+                    fault_detect_protect(1,0,1,3,0x4);
                 }
                 else
                 {
@@ -509,6 +513,9 @@ void main(void)
     
             case 0x08:                                  //睡眠模式
                 pwm_set(MOS_OFF);
+	            g_led_r = 0;
+                g_led_g = 0;
+                g_led_b = 0;
                 P70 = 1;                                //灭红灯
                 P71 = 1;                                //灭绿灯
                 P51 = 0;                                //灭蓝灯
@@ -522,7 +529,7 @@ void main(void)
                 g_time1ms_cnt = 0;
                 g_time50ms_cnt = 0;
                 g_time200ms_cnt = 0;
-                
+                g_led_light_times = 0;
                 g_keypress_maxtime = 0;   
                 
                 g_adc_flag = 0;
@@ -588,11 +595,8 @@ void main(void)
                     g_keypress_times++;
                 }
                 
-                //按键按下时，关掉MOS管并且灭灯
+                //按键按下时，关掉MOS管
                 pwm_set(MOS_OFF);
-                g_led_r = 0;
-                g_led_g = 0;
-                g_led_b = 0;
                 
                 g_keypress_maxtime = 0;
             }
